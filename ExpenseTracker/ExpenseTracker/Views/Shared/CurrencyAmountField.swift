@@ -104,6 +104,19 @@ struct CurrencyAmountField: View {
 
             if alignment != .trailing { Spacer(minLength: 0) }
         }
+        // Focusing used to depend on the tap landing inside the invisible
+        // TextField's own (geometry-measured) bounds, which in practice only
+        // covered a sliver near dead-center of the number — hence needing a
+        // precise, sometimes repeated, tap to bring up the keyboard. Making
+        // the *entire* row a tap target and driving focus through
+        // `@FocusState` instead means any tap on the number, the currency
+        // symbol, or the padding around them (left or right, not just
+        // center) opens the keyboard — and since SwiftUI reconciles the
+        // native responder to match `isFocused` on every update, this also
+        // self-heals if something else (e.g. a sibling "tap to dismiss
+        // keyboard" gesture) races to resign focus around the same tap.
+        .contentShape(Rectangle())
+        .onTapGesture { isFocused = true }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Amount")
         .accessibilityValue("\(formattedDisplay) \(currencySymbol)")
