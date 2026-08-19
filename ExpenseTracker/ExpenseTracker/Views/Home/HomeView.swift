@@ -15,13 +15,15 @@ struct HomeView: View {
     @State private var date: Date = .now
     @State private var editingTransaction: Transaction?
     @State private var overBudgetAlert: OverBudgetAlert?
+    @State private var isInputExpanded = true
     @StateObject private var keyboard = KeyboardVisibility()
 
     private var filteredCategories: [Category] {
         categories.filter { $0.defaultType == selectedType }
     }
 
-    /// Transactions dated today or yesterday, grouped for the "Recent" list.
+    /// Home only ever shows today's and yesterday's activity — anything
+    /// older belongs in Reports, which can slice by week/month/custom range.
     private var groupedTransactions: [(title: String, items: [Transaction])] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -84,53 +86,78 @@ struct HomeView: View {
 
     private var inputArea: some View {
         VStack(spacing: 12) {
-            Picker("Type", selection: $selectedType) {
-                ForEach(TransactionType.allCases) { type in
-                    Text(type.shortLabel).tag(type)
-                }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: selectedType) {
-                if selectedCategory?.defaultType != selectedType {
-                    selectedCategory = nil
-                }
-            }
+            inputAreaHeader
 
-            CurrencyAmountField(amount: $amount)
-                .padding(.vertical, 4)
+            if isInputExpanded {
+                Picker("Type", selection: $selectedType) {
+                    ForEach(TransactionType.allCases) { type in
+                        Text(type.shortLabel).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedType) {
+                    if selectedCategory?.defaultType != selectedType {
+                        selectedCategory = nil
+                    }
+                }
 
-            if filteredCategories.isEmpty {
-                Text("No categories for \(selectedType.shortLabel) yet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-            } else {
-                CategorySelector(categories: filteredCategories, selection: $selectedCategory)
+                CurrencyAmountField(amount: $amount)
+                    .padding(.vertical, 4)
+
+                if filteredCategories.isEmpty {
+                    Text("No categories for \(selectedType.shortLabel) yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                } else {
+                    CategorySelector(categories: filteredCategories, selection: $selectedCategory)
+                        .padding(.horizontal)
+                }
+
+                DatePicker("Date & Time", selection: $date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
                     .padding(.horizontal)
-            }
 
-            DatePicker("Date & Time", selection: $date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+                TextField("Note (optional)", text: $note)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal)
+
+                Button(action: saveTransaction) {
+                    Text("Save")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canSave ? Color.accentColor : Color.gray.opacity(0.3))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!canSave)
                 .padding(.horizontal)
-
-            TextField("Note (optional)", text: $note)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal)
-
-            Button(action: saveTransaction) {
-                Text("Save")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(canSave ? Color.accentColor : Color.gray.opacity(0.3))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-            .disabled(!canSave)
-            .padding(.horizontal)
         }
         .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.bottom, isInputExpanded ? 12 : 4)
+    }
+
+    /// Tapping anywhere on the row — not just the chevron — toggles the
+    /// section, since a lone small chevron is an easy target to miss.
+    private var inputAreaHeader: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { isInputExpanded.toggle() }
+        } label: {
+            HStack {
+                Text("Add Transaction")
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isInputExpanded ? 0 : -90))
+            }
+            .padding(.horizontal)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Recent list
