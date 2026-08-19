@@ -52,7 +52,8 @@ enum DefaultDataSeeder {
         ("Tiền học", "graduationcap.fill", "#5856D6", .expense, nil),
         ("Phí tài khoản", "creditcard.fill", "#48484A", .expense, nil),
         ("Tiền điện", "bolt.fill", "#FFD60A", .expense, nil),
-        ("Mừng cưới", "heart.fill", "#FF375F", .expense, nil)
+        ("Mừng cưới", "heart.fill", "#FF375F", .expense, nil),
+        ("Khám chữa bệnh", "stethoscope", "#FF6961", .expense, nil)
     ]
 
     @MainActor
