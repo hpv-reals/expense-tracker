@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UniformTypeIdentifiers
 
 struct ReportsView: View {
     @Binding var selectedTab: AppTab
@@ -17,7 +18,11 @@ struct ReportsView: View {
     /// wedge or its legend row (both feed the same selection), and drives the
     /// transaction list shown below.
     @State private var selectedCategoryID: UUID?
+    @State private var editingTransaction: Transaction?
+    @State private var isShowingImporter = false
+    @State private var importResultMessage: String?
     @StateObject private var keyboard = KeyboardVisibility()
+    @Environment(\.modelContext) private var modelContext
 
     /// The `[start, end)` range currently in effect — either the selected preset
     /// or the user-picked custom start/end when `period == .custom`.
@@ -95,12 +100,75 @@ struct ReportsView: View {
                     .hidesWhileKeyboardVisible(keyboard)
             }
             .navigationTitle("Reports")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingImporter = true
+                    } label: {
+                        Label("Import CSV", systemImage: "square.and.arrow.down")
+                    }
+                }
+            }
             .sheet(isPresented: $isShowingCategoryFilter) {
                 CategoryFilterSheet(categories: categories, selectedIDs: $selectedCategoryIDs)
+            }
+            .sheet(item: $editingTransaction) { transaction in
+                EditTransactionSheet(transaction: transaction)
+            }
+            .fileImporter(
+                isPresented: $isShowingImporter,
+                allowedContentTypes: [.commaSeparatedText, .plainText],
+                onCompletion: handleImportResult
+            )
+            .alert(
+                "Import CSV",
+                isPresented: Binding(
+                    get: { importResultMessage != nil },
+                    set: { isPresented in if !isPresented { importResultMessage = nil } }
+                ),
+                presenting: importResultMessage
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { message in
+                Text(message)
             }
             .onAppear(perform: seedCategoryFilterIfNeeded)
             .onChange(of: categories) { _, _ in seedCategoryFilterIfNeeded() }
         }
+    }
+
+    /// Imports the CSV the user picked (columns: STT, Nội dung, Loại thu/chi,
+    /// Danh mục, Số tiền, Ngày), then surfaces a summary — imported vs.
+    /// skipped-as-duplicate counts, any categories created along the way, and
+    /// the first few row errors if some rows couldn't be parsed.
+    private func handleImportResult(_ result: Result<URL, Error>) {
+        switch result {
+        case .failure(let error):
+            importResultMessage = "Không thể mở file: \(error.localizedDescription)"
+        case .success(let url):
+            do {
+                let summary = try TransactionCSVImporter.importCSV(at: url, context: modelContext)
+                importResultMessage = importSummaryText(summary)
+            } catch {
+                importResultMessage = "Import thất bại: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func importSummaryText(_ summary: TransactionCSVImporter.Summary) -> String {
+        var lines = ["Đã import \(summary.importedCount) giao dịch."]
+        if summary.skippedDuplicateCount > 0 {
+            lines.append("Bỏ qua \(summary.skippedDuplicateCount) giao dịch trùng.")
+        }
+        if !summary.createdCategoryNames.isEmpty {
+            lines.append("Đã tạo danh mục mới: \(summary.createdCategoryNames.joined(separator: ", ")).")
+        }
+        if !summary.rowErrors.isEmpty {
+            let shown = summary.rowErrors.prefix(5).joined(separator: "\n")
+            let more = summary.rowErrors.count > 5 ? "\n… và \(summary.rowErrors.count - 5) lỗi khác" : ""
+            lines.append("Lỗi:\n\(shown)\(more)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     @ViewBuilder
@@ -283,7 +351,8 @@ struct ReportsView: View {
     /// a wedge or legend row yet; tapping one narrows it, and "Clear" (or
     /// tapping the same wedge/row again) goes back to the full list. Grouped
     /// by day underneath that (same "Today" / "Yesterday" / `dd-MM-yyyy"
-    /// scheme as Home) since each row only shows a time, not a date.
+    /// scheme as Home) since each row only shows a time, not a date. Rows
+    /// support the same tap-to-edit / swipe-to-delete as Home.
     @ViewBuilder
     private var transactionsSection: some View {
         // Only shown once a category is drilled into — it's the sole place
@@ -309,9 +378,23 @@ struct ReportsView: View {
             Section(group.title) {
                 ForEach(group.items) { transaction in
                     TransactionRow(transaction: transaction)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingTransaction = transaction }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                delete(transaction)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                 }
             }
         }
+    }
+
+    private func delete(_ transaction: Transaction) {
+        modelContext.delete(transaction)
+        try? modelContext.save()
     }
 
     private var displayedTransactions: [Transaction] {
