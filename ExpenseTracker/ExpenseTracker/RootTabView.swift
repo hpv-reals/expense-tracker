@@ -43,7 +43,11 @@ struct RootTabView: View {
         // blur), which is what read as a "nháy" / flicker at the bar. With a
         // single shared instance, switching tabs just slides the highlight
         // within that one bar — no second bar ever fades in behind it.
-        ZStack {
+        // `alignment: .bottom` — a plain `ZStack` centers its children, which
+        // pinned the bar to the vertical middle of the screen instead of the
+        // bottom edge, since `FloatingTabBar` only sizes itself to its own
+        // content rather than filling the screen.
+        ZStack(alignment: .bottom) {
             // All three tabs stay mounted (just hidden), matching native
             // TabView behavior — scroll position and in-progress state in a
             // background tab survive switching away and back.
