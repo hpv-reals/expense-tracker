@@ -21,7 +21,6 @@ struct ReportsView: View {
     @State private var editingTransaction: Transaction?
     @State private var isShowingImporter = false
     @State private var importResultMessage: String?
-    @StateObject private var keyboard = KeyboardVisibility()
     @Environment(\.modelContext) private var modelContext
 
     /// The `[start, end)` range currently in effect — either the selected preset
@@ -96,8 +95,7 @@ struct ReportsView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                FloatingTabBar(selectedTab: $selectedTab)
-                    .hidesWhileKeyboardVisible(keyboard)
+                FloatingTabBar.hiddenSpacer(selectedTab: $selectedTab)
             }
             .navigationTitle("Reports")
             .toolbar {

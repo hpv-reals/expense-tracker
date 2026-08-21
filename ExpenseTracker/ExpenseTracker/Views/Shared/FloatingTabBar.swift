@@ -11,6 +11,20 @@ struct FloatingTabBar: View {
     @Binding var selectedTab: AppTab
     @Namespace private var highlight
 
+    /// An invisible stand-in with the exact same size as the real bar, used
+    /// in each tab's own `.safeAreaInset` purely to reserve scroll space —
+    /// the one bar actually drawn lives once, at the root, as a plain
+    /// overlay (see `RootTabView`). Keeping this as a real `FloatingTabBar`
+    /// (just hidden) rather than a hand-measured `Color.clear` frame
+    /// guarantees the reserved space always matches the visible bar's
+    /// layout exactly, even if that layout changes later.
+    static func hiddenSpacer(selectedTab: Binding<AppTab>) -> some View {
+        FloatingTabBar(selectedTab: selectedTab)
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases, id: \.self) { tab in

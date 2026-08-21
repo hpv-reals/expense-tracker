@@ -7,7 +7,7 @@ struct ExpenseTrackerApp: App {
 
     init() {
         do {
-            container = try ModelContainer(for: Category.self, Transaction.self)
+            container = try ModelContainer(for: Category.self, Transaction.self, RecurringBill.self)
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
@@ -18,6 +18,7 @@ struct ExpenseTrackerApp: App {
             RootTabView()
                 .task {
                     DefaultDataSeeder.seedIfNeeded(context: container.mainContext)
+                    RecurringBillEngine.processDueBills(context: container.mainContext)
                 }
         }
         .modelContainer(container)

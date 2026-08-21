@@ -9,7 +9,7 @@ enum AppTab: CaseIterable {
         switch self {
         case .home: return "Home"
         case .reports: return "Reports"
-        case .limits: return "Limits"
+        case .limits: return "Manage"
         }
     }
 
@@ -24,14 +24,25 @@ enum AppTab: CaseIterable {
 
 struct RootTabView: View {
     @State private var selectedTab: AppTab = .home
+    @StateObject private var keyboard = KeyboardVisibility()
 
     var body: some View {
-        // Each tab applies the FloatingTabBar as its own `.safeAreaInset`
-        // directly around its scrollable content (not once here, wrapping
-        // all three) — a `.safeAreaInset` set outside a tab's own
+        // Each tab still reserves space for the bar via its own
+        // `.safeAreaInset` — a `.safeAreaInset` set outside a tab's own
         // NavigationStack doesn't reliably reach the List/ScrollView nested
         // inside it, which was letting the last rows of a long list sit
-        // underneath the floating bar instead of stopping above it.
+        // underneath the floating bar instead of stopping above it — but
+        // that inset now holds an *invisible* placeholder (see
+        // `FloatingTabBar.hiddenSpacer`) rather than a real, rendered bar.
+        //
+        // The one bar the user actually sees lives once, here, as a plain
+        // overlay on top of the whole tab stack. Previously every tab drew
+        // its own real `FloatingTabBar`, each with its own selection-highlight
+        // `@Namespace`; switching tabs cross-faded between two independent
+        // translucent capsules (each carrying its own `.ultraThinMaterial`
+        // blur), which is what read as a "nháy" / flicker at the bar. With a
+        // single shared instance, switching tabs just slides the highlight
+        // within that one bar — no second bar ever fades in behind it.
         ZStack {
             // All three tabs stay mounted (just hidden), matching native
             // TabView behavior — scroll position and in-progress state in a
@@ -50,11 +61,14 @@ struct RootTabView: View {
                 .opacity(selectedTab == .limits ? 1 : 0)
                 .allowsHitTesting(selectedTab == .limits)
                 .accessibilityHidden(selectedTab != .limits)
+
+            FloatingTabBar(selectedTab: $selectedTab)
+                .hidesWhileKeyboardVisible(keyboard)
         }
     }
 }
 
 #Preview {
     RootTabView()
-        .modelContainer(for: [Category.self, Transaction.self], inMemory: true)
+        .modelContainer(for: [Category.self, Transaction.self, RecurringBill.self], inMemory: true)
 }

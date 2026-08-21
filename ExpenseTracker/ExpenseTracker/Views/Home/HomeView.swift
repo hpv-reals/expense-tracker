@@ -16,7 +16,6 @@ struct HomeView: View {
     @State private var editingTransaction: Transaction?
     @State private var overBudgetAlert: OverBudgetAlert?
     @State private var isInputExpanded = true
-    @StateObject private var keyboard = KeyboardVisibility()
 
     private var filteredCategories: [Category] {
         categories.filter { $0.defaultType == selectedType }
@@ -59,8 +58,7 @@ struct HomeView: View {
                 transactionList
             }
             .safeAreaInset(edge: .bottom) {
-                FloatingTabBar(selectedTab: $selectedTab)
-                    .hidesWhileKeyboardVisible(keyboard)
+                FloatingTabBar.hiddenSpacer(selectedTab: $selectedTab)
             }
             .dismissKeyboardOnTap()
             .navigationTitle("Expense Tracker")
