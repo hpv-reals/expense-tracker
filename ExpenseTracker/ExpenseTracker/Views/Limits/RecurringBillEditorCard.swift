@@ -62,7 +62,12 @@ struct RecurringBillEditorCard: View {
 
             frequencyPicker
 
-            DatePicker("Next due date", selection: $nextDueDate, displayedComponents: .date)
+            VStack(alignment: .leading, spacing: 4) {
+                DatePicker("Next due date", selection: $nextDueDate, displayedComponents: [.date, .hourAndMinute])
+                Text("The transaction is created at this exact time — pick a time you're actually awake for, e.g. 8:00 AM.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             if !expenseCategories.isEmpty {
                 CategorySelector(categories: expenseCategories, selection: $selectedCategory)
@@ -140,13 +145,24 @@ struct RecurringBillEditorCard: View {
     }
 
     private func loadExistingValues() {
-        guard let existingBill else { return }
+        guard let existingBill else {
+            // A brand-new bill defaults to 8 AM today rather than whatever
+            // moment "Add Bill" happened to be tapped — firing at 11 PM (or
+            // 3 AM) just because that's when the bill was created isn't what
+            // anyone wants. Still fully editable via the picker above.
+            nextDueDate = Self.defaultNextDueDate()
+            return
+        }
         name = existingBill.name
         amount = existingBill.amount
         frequency = RecurringFrequency(rawValue: existingBill.intervalMonths) ?? .monthly
         nextDueDate = existingBill.nextDueDate
         selectedCategory = existingBill.category
         isActive = existingBill.isActive
+    }
+
+    private static func defaultNextDueDate(calendar: Calendar = .current) -> Date {
+        calendar.date(bySettingHour: 8, minute: 0, second: 0, of: .now) ?? .now
     }
 
     private func save() {
@@ -161,9 +177,11 @@ struct RecurringBillEditorCard: View {
 
             // Only reset the schedule (anchor + cycle count) when the
             // schedule itself actually changed — editing just the amount or
-            // category shouldn't reset an already-ticking cycle.
+            // category shouldn't reset an already-ticking cycle. Compared
+            // down to the minute (not just the day) so changing only the
+            // time — e.g. moving a bill from 11 PM to 8 AM — is picked up too.
             let scheduleChanged = existingBill.intervalMonths != frequency.intervalMonths
-                || !Calendar.current.isDate(existingBill.nextDueDate, inSameDayAs: nextDueDate)
+                || existingBill.nextDueDate != nextDueDate
             if scheduleChanged {
                 existingBill.intervalMonths = frequency.intervalMonths
                 existingBill.anchorDate = nextDueDate

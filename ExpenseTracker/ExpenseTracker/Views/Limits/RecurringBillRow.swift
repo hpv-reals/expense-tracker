@@ -10,7 +10,7 @@ struct RecurringBillRow: View {
     }
 
     private var scheduleLabel: String {
-        "\(frequencyLabel) · next \(bill.nextDueDate.formatted(date: .abbreviated, time: .omitted))"
+        "\(frequencyLabel) · next \(bill.nextDueDate.formatted(date: .abbreviated, time: .shortened))"
     }
 
     var body: some View {
