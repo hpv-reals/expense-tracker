@@ -74,6 +74,18 @@ struct ReportsView: View {
     }
 
     var body: some View {
+        ZStack {
+            reportsNavigationStack
+
+            if let editingTransaction {
+                EditTransactionSheet(transaction: editingTransaction, onDismiss: { self.editingTransaction = nil })
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: editingTransaction?.id)
+    }
+
+    private var reportsNavigationStack: some View {
         NavigationStack {
             List {
                 filterSection
@@ -109,9 +121,6 @@ struct ReportsView: View {
             }
             .sheet(isPresented: $isShowingCategoryFilter) {
                 CategoryFilterSheet(categories: categories, selectedIDs: $selectedCategoryIDs)
-            }
-            .sheet(item: $editingTransaction) { transaction in
-                EditTransactionSheet(transaction: transaction)
             }
             .fileImporter(
                 isPresented: $isShowingImporter,

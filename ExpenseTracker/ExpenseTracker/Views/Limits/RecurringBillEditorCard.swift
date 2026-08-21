@@ -24,7 +24,8 @@ struct RecurringBillEditorCard: View {
     @Environment(\.modelContext) private var modelContext
     @State private var name: String = ""
     @State private var amount: Double = 0
-    @State private var dayOfMonth: Int = 1
+    @State private var frequency: RecurringFrequency = .monthly
+    @State private var nextDueDate: Date = .now
     @State private var selectedCategory: Category?
     @State private var isActive: Bool = true
 
@@ -59,7 +60,9 @@ struct RecurringBillEditorCard: View {
 
             CurrencyAmountField(amount: $amount, font: .system(size: 34, weight: .bold, design: .rounded))
 
-            dayOfMonthPicker
+            frequencyPicker
+
+            DatePicker("Next due date", selection: $nextDueDate, displayedComponents: .date)
 
             if !expenseCategories.isEmpty {
                 CategorySelector(categories: expenseCategories, selection: $selectedCategory)
@@ -109,18 +112,17 @@ struct RecurringBillEditorCard: View {
         .padding(.horizontal, 24)
     }
 
-    private var dayOfMonthPicker: some View {
-        HStack {
-            Text("Bills on day")
+    private var frequencyPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Repeats")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Spacer()
-            Picker("Day of month", selection: $dayOfMonth) {
-                ForEach(1...31, id: \.self) { day in
-                    Text("\(day)").tag(day)
+            Picker("Frequency", selection: $frequency) {
+                ForEach(RecurringFrequency.allCases) { frequency in
+                    Text(frequency.label).tag(frequency)
                 }
             }
-            .pickerStyle(.menu)
+            .pickerStyle(.segmented)
         }
     }
 
@@ -141,7 +143,8 @@ struct RecurringBillEditorCard: View {
         guard let existingBill else { return }
         name = existingBill.name
         amount = existingBill.amount
-        dayOfMonth = existingBill.dayOfMonth
+        frequency = RecurringFrequency(rawValue: existingBill.intervalMonths) ?? .monthly
+        nextDueDate = existingBill.nextDueDate
         selectedCategory = existingBill.category
         isActive = existingBill.isActive
     }
@@ -155,18 +158,25 @@ struct RecurringBillEditorCard: View {
             existingBill.amount = amount
             existingBill.category = selectedCategory
             existingBill.isActive = isActive
-            // Only reschedule off a changed due day — leave nextDueDate alone
-            // otherwise, so editing the amount doesn't reset an already-ticking cycle.
-            if existingBill.dayOfMonth != dayOfMonth {
-                existingBill.dayOfMonth = dayOfMonth
-                existingBill.nextDueDate = RecurringBillEngine.initialDueDate(dayOfMonth: dayOfMonth)
+
+            // Only reset the schedule (anchor + cycle count) when the
+            // schedule itself actually changed — editing just the amount or
+            // category shouldn't reset an already-ticking cycle.
+            let scheduleChanged = existingBill.intervalMonths != frequency.intervalMonths
+                || !Calendar.current.isDate(existingBill.nextDueDate, inSameDayAs: nextDueDate)
+            if scheduleChanged {
+                existingBill.intervalMonths = frequency.intervalMonths
+                existingBill.anchorDate = nextDueDate
+                existingBill.cycleCount = 0
+                existingBill.nextDueDate = nextDueDate
             }
         } else {
             let bill = RecurringBill(
                 name: trimmedName,
                 amount: amount,
-                dayOfMonth: dayOfMonth,
-                nextDueDate: RecurringBillEngine.initialDueDate(dayOfMonth: dayOfMonth),
+                intervalMonths: frequency.intervalMonths,
+                anchorDate: nextDueDate,
+                nextDueDate: nextDueDate,
                 category: selectedCategory
             )
             modelContext.insert(bill)

@@ -51,33 +51,38 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                inputArea
-                Divider()
-                transactionList
+        ZStack {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    inputArea
+                    Divider()
+                    transactionList
+                }
+                .safeAreaInset(edge: .bottom) {
+                    FloatingTabBar.hiddenSpacer(selectedTab: $selectedTab)
+                }
+                .dismissKeyboardOnTap()
+                .navigationTitle("Expense Tracker")
+                .alert(
+                    "Over Budget",
+                    isPresented: Binding(
+                        get: { overBudgetAlert != nil },
+                        set: { isPresented in if !isPresented { overBudgetAlert = nil } }
+                    ),
+                    presenting: overBudgetAlert
+                ) { _ in
+                    Button("OK", role: .cancel) {}
+                } message: { alert in
+                    Text("\(alert.categoryName) is now \(alert.overBy.formattedCurrency) over its \(alert.limit.formattedCurrency) monthly limit (spent \(alert.spent.formattedCurrency)).")
+                }
             }
-            .safeAreaInset(edge: .bottom) {
-                FloatingTabBar.hiddenSpacer(selectedTab: $selectedTab)
-            }
-            .dismissKeyboardOnTap()
-            .navigationTitle("Expense Tracker")
-            .sheet(item: $editingTransaction) { transaction in
-                EditTransactionSheet(transaction: transaction)
-            }
-            .alert(
-                "Over Budget",
-                isPresented: Binding(
-                    get: { overBudgetAlert != nil },
-                    set: { isPresented in if !isPresented { overBudgetAlert = nil } }
-                ),
-                presenting: overBudgetAlert
-            ) { _ in
-                Button("OK", role: .cancel) {}
-            } message: { alert in
-                Text("\(alert.categoryName) is now \(alert.overBy.formattedCurrency) over its \(alert.limit.formattedCurrency) monthly limit (spent \(alert.spent.formattedCurrency)).")
+
+            if let editingTransaction {
+                EditTransactionSheet(transaction: editingTransaction, onDismiss: { self.editingTransaction = nil })
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: editingTransaction?.id)
     }
 
     // MARK: - Input area

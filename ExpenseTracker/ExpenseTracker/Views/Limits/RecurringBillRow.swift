@@ -5,8 +5,12 @@ struct RecurringBillRow: View {
 
     private var tint: Color { Color(hex: bill.category?.colorHex ?? "#8E8E93") }
 
+    private var frequencyLabel: String {
+        RecurringFrequency.label(forIntervalMonths: bill.intervalMonths)
+    }
+
     private var scheduleLabel: String {
-        "Day \(bill.dayOfMonth) · next \(bill.nextDueDate.formatted(date: .abbreviated, time: .omitted))"
+        "\(frequencyLabel) · next \(bill.nextDueDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
     var body: some View {

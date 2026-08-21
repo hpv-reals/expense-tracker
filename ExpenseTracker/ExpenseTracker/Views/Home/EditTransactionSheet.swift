@@ -1,13 +1,16 @@
 import SwiftUI
 import SwiftData
 
-/// Sheet presented when tapping a transaction in the Home list, letting the
-/// user update its amount, type, category, or note.
+/// Card presented over Home when tapping a transaction in the list — styled
+/// like `BudgetEditorCard`/`RecurringBillEditorCard` (a centered card over a
+/// dimmed background) rather than a full-screen sheet, so editing a
+/// transaction looks and behaves like every other "edit this thing" control
+/// in the app instead of standing out as a different kind of screen.
 struct EditTransactionSheet: View {
     @Bindable var transaction: Transaction
+    let onDismiss: () -> Void
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \Category.name) private var categories: [Category]
 
     @State private var amount: Double = 0
@@ -25,54 +28,100 @@ struct EditTransactionSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Type") {
-                    Picker("Type", selection: $selectedType) {
-                        ForEach(TransactionType.allCases) { type in
-                            Text(type.shortLabel).tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: selectedType) {
-                        if selectedCategory?.defaultType != selectedType {
-                            selectedCategory = nil
-                        }
-                    }
-                }
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
 
-                Section("Amount") {
-                    CurrencyAmountField(amount: $amount, font: .body, alignment: .trailing)
-                }
-
-                Section("Category") {
-                    CategorySelector(categories: filteredCategories, selection: $selectedCategory)
-                        .padding(.vertical, 4)
-                }
-
-                Section("Date") {
-                    DatePicker("Date & Time", selection: $date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
-                }
-
-                Section("Note") {
-                    TextField("Note (optional)", text: $note)
-                }
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .dismissKeyboardOnTap()
-            .navigationTitle("Edit Transaction")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!canSave)
-                }
-            }
+            card
         }
         .onAppear(perform: loadInitialState)
+        .dismissKeyboardOnTap()
+    }
+
+    private var card: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Edit Transaction")
+                    .font(.headline)
+
+                Picker("Type", selection: $selectedType) {
+                    ForEach(TransactionType.allCases) { type in
+                        Text(type.shortLabel).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedType) {
+                    if selectedCategory?.defaultType != selectedType {
+                        selectedCategory = nil
+                    }
+                }
+
+                CurrencyAmountField(amount: $amount, font: .system(size: 34, weight: .bold, design: .rounded))
+
+                if filteredCategories.isEmpty {
+                    Text("No categories for \(selectedType.shortLabel) yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                } else {
+                    CategorySelector(categories: filteredCategories, selection: $selectedCategory)
+                }
+
+                DatePicker("Date & Time", selection: $date, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
+
+                TextField("Note (optional)", text: $note)
+                    .textFieldStyle(.roundedBorder)
+
+                VStack(spacing: 12) {
+                    Button(action: save) {
+                        Text("Save")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(canSave ? Color.accentColor : Color.gray.opacity(0.3))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .disabled(!canSave)
+
+                    HStack(spacing: 12) {
+                        Button(action: delete) {
+                            Text("Delete")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.red.opacity(0.12))
+                                .foregroundStyle(.red)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+
+                        cancelButton
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: 340, maxHeight: 620)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.25), radius: 20, y: 8)
+        .padding(.horizontal, 24)
+    }
+
+    private var cancelButton: some View {
+        Button(action: onDismiss) {
+            Text("Cancel")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.gray.opacity(0.15))
+                .foregroundStyle(.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
 
     private func loadInitialState() {
@@ -91,6 +140,12 @@ struct EditTransactionSheet: View {
         transaction.category = selectedCategory
         transaction.date = date
         try? modelContext.save()
-        dismiss()
+        onDismiss()
+    }
+
+    private func delete() {
+        modelContext.delete(transaction)
+        try? modelContext.save()
+        onDismiss()
     }
 }
