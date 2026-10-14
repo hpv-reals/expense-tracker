@@ -18,9 +18,13 @@ struct EditTransactionSheet: View {
     @State private var selectedType: TransactionType = .expense
     @State private var selectedCategory: Category?
     @State private var date: Date = .now
+    @State private var recipientName: String = ""
+    @State private var sourceName: String = ""
+    @State private var destinationAccount: String = ""
+    @State private var isSettled = true
 
     private var filteredCategories: [Category] {
-        categories.filter { $0.defaultType == selectedType }
+        categories.filter { selectedType.accepts($0) }
     }
 
     private var canSave: Bool {
@@ -52,7 +56,7 @@ struct EditTransactionSheet: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: selectedType) {
-                    if selectedCategory?.defaultType != selectedType {
+                    if let current = selectedCategory, !selectedType.accepts(current) {
                         selectedCategory = nil
                     }
                 }
@@ -73,6 +77,14 @@ struct EditTransactionSheet: View {
 
                 TextField("Note (optional)", text: $note)
                     .textFieldStyle(.roundedBorder)
+
+                TransactionDetailFields(
+                    type: selectedType,
+                    recipientName: $recipientName,
+                    sourceName: $sourceName,
+                    destinationAccount: $destinationAccount,
+                    isSettled: $isSettled
+                )
 
                 VStack(spacing: 12) {
                     Button(action: save) {
@@ -130,6 +142,15 @@ struct EditTransactionSheet: View {
         selectedType = transaction.type
         selectedCategory = transaction.category
         date = transaction.date
+        recipientName = transaction.recipientName ?? ""
+        sourceName = transaction.sourceName ?? ""
+        destinationAccount = transaction.destinationAccount ?? ""
+        isSettled = transaction.isSettled
+    }
+
+    private func trimmedOrNil(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func save() {
@@ -139,6 +160,10 @@ struct EditTransactionSheet: View {
         transaction.type = selectedType
         transaction.category = selectedCategory
         transaction.date = date
+        transaction.recipientName = trimmedOrNil(recipientName)
+        transaction.sourceName = trimmedOrNil(sourceName)
+        transaction.destinationAccount = selectedType == .transfer ? trimmedOrNil(destinationAccount) : nil
+        transaction.isSettled = isSettled
         try? modelContext.save()
         onDismiss()
     }

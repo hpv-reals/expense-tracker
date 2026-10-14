@@ -11,17 +11,20 @@ import SwiftData
 struct BudgetEditorCard: View {
     enum Target: Identifiable, Equatable {
         case add
-        case edit(Category)
+        case edit(Budget)
 
         var id: String {
             switch self {
             case .add: return "add"
-            case .edit(let category): return category.id.uuidString
+            case .edit(let budget): return budget.id.uuidString
             }
         }
     }
 
     let target: Target
+    /// Which ledger a newly-created budget is attached to — an existing
+    /// budget being edited already has its own workspace and doesn't need this.
+    let workspace: Workspace
     let unbudgetedCategories: [Category]
     let onDismiss: () -> Void
 
@@ -29,10 +32,12 @@ struct BudgetEditorCard: View {
     @State private var selectedCategory: Category?
     @State private var amount: Double = 0
 
-    private var existingCategory: Category? {
-        if case .edit(let category) = target { return category }
+    private var existingBudget: Budget? {
+        if case .edit(let budget) = target { return budget }
         return nil
     }
+
+    private var existingCategory: Category? { existingBudget?.category }
 
     private var targetCategory: Category? { existingCategory ?? selectedCategory }
     private var canSave: Bool { targetCategory != nil && amount > 0 }
@@ -46,8 +51,8 @@ struct BudgetEditorCard: View {
             card
         }
         .onAppear {
-            if let existingCategory {
-                amount = existingCategory.limitAmount ?? 0
+            if let existingBudget {
+                amount = existingBudget.limitAmount
             }
         }
         .dismissKeyboardOnTap()
@@ -144,14 +149,19 @@ struct BudgetEditorCard: View {
     }
 
     private func save() {
-        guard let target = targetCategory, amount > 0 else { return }
-        target.limitAmount = amount
+        guard let category = targetCategory, amount > 0 else { return }
+        if let existingBudget {
+            existingBudget.limitAmount = amount
+        } else {
+            modelContext.insert(Budget(workspace: workspace, category: category, limitAmount: amount))
+        }
         try? modelContext.save()
         onDismiss()
     }
 
     private func removeLimit() {
-        existingCategory?.limitAmount = nil
+        guard let existingBudget else { return }
+        modelContext.delete(existingBudget)
         try? modelContext.save()
         onDismiss()
     }

@@ -19,8 +19,8 @@ struct TransactionRow: View {
                 Text(transaction.category?.name ?? "Uncategorized")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                if let note = transaction.note, !note.isEmpty {
-                    Text(note)
+                if let detail = detailText {
+                    Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -34,12 +34,29 @@ struct TransactionRow: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(transaction.type.isPositiveFlow ? .green : .primary)
-                Text(transaction.date.formatted(date: .omitted, time: .shortened))
+                Text(timeText)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(transaction.isSettled ? Color.secondary : Color.orange)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// "→ account · recipient · note", skipping whatever is empty.
+    private var detailText: String? {
+        var parts: [String] = []
+        if transaction.type == .transfer, let destination = transaction.destinationAccount {
+            parts.append("→ " + destination)
+        }
+        if let recipient = transaction.recipientName { parts.append(recipient) }
+        if let note = transaction.note { parts.append(note) }
+        parts = parts.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var timeText: String {
+        let time = transaction.date.formatted(date: .omitted, time: .shortened)
+        return transaction.isSettled ? time : time + " · Pending"
     }
 
     private var signedAmountText: String {

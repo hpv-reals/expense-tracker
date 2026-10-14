@@ -2,9 +2,9 @@ import SwiftUI
 
 struct LimitRow: View {
     let category: Category
+    let limit: Double
     let spent: Double
 
-    private var limit: Double { category.limitAmount ?? 0 }
     private var progress: Double { limit > 0 ? min(spent / limit, 1.0) : 0 }
     private var isOverBudget: Bool { limit > 0 && spent > limit }
     private var tint: Color { Color(hex: category.colorHex) }

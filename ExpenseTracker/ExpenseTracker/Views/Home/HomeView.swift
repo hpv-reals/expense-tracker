@@ -7,18 +7,39 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Category.name) private var categories: [Category]
     @Query(sort: \Transaction.date, order: .reverse) private var allTransactions: [Transaction]
+    @Query(sort: \Workspace.name) private var workspaces: [Workspace]
+    @Query private var allBudgets: [Budget]
+    @AppStorage("selectedWorkspaceIDString") private var selectedWorkspaceIDString: String = ""
 
     @State private var selectedType: TransactionType = .expense
     @State private var amount: Double = 0
     @State private var selectedCategory: Category?
     @State private var note: String = ""
     @State private var date: Date = .now
+    @State private var recipientName: String = ""
+    @State private var sourceName: String = ""
+    @State private var destinationAccount: String = ""
+    @State private var isSettled = true
     @State private var editingTransaction: Transaction?
     @State private var overBudgetAlert: OverBudgetAlert?
     @State private var isInputExpanded = true
 
     private var filteredCategories: [Category] {
-        categories.filter { $0.defaultType == selectedType }
+        categories.filter { selectedType.accepts($0) }
+    }
+
+    /// The workspace ("Cá nhân" vs "Doanh nghiệp") currently in effect — see
+    /// `WorkspaceSwitcher`. Falls back to the default workspace (and then to
+    /// whatever exists) so a not-yet-persisted selection, or a since-deleted
+    /// one, never leaves the tab showing nothing.
+    private var currentWorkspace: Workspace? {
+        workspaces.first(where: { $0.id.uuidString == selectedWorkspaceIDString })
+            ?? workspaces.first(where: \.isDefault)
+            ?? workspaces.first
+    }
+
+    private var workspaceTransactions: [Transaction] {
+        allTransactions.filter { $0.workspace?.id == currentWorkspace?.id }
     }
 
     /// Home only ever shows today's and yesterday's activity — anything
@@ -31,7 +52,7 @@ struct HomeView: View {
         var todayItems: [Transaction] = []
         var yesterdayItems: [Transaction] = []
 
-        for transaction in allTransactions {
+        for transaction in workspaceTransactions {
             let day = calendar.startOfDay(for: transaction.date)
             if day == today {
                 todayItems.append(transaction)
@@ -63,6 +84,11 @@ struct HomeView: View {
                 }
                 .dismissKeyboardOnTap()
                 .navigationTitle("Expense Tracker")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        WorkspaceSwitcher(workspaces: workspaces, selectedWorkspaceIDString: $selectedWorkspaceIDString)
+                    }
+                }
                 .alert(
                     "Over Budget",
                     isPresented: Binding(
@@ -99,7 +125,7 @@ struct HomeView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: selectedType) {
-                    if selectedCategory?.defaultType != selectedType {
+                    if let current = selectedCategory, !selectedType.accepts(current) {
                         selectedCategory = nil
                     }
                 }
@@ -124,6 +150,15 @@ struct HomeView: View {
                 TextField("Note (optional)", text: $note)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
+
+                TransactionDetailFields(
+                    type: selectedType,
+                    recipientName: $recipientName,
+                    sourceName: $sourceName,
+                    destinationAccount: $destinationAccount,
+                    isSettled: $isSettled
+                )
+                .padding(.horizontal)
 
                 Button(action: saveTransaction) {
                     Text("Save")
@@ -209,7 +244,12 @@ struct HomeView: View {
             date: savedDate,
             note: note.isEmpty ? nil : note,
             type: selectedType,
-            category: category
+            category: category,
+            workspace: currentWorkspace,
+            recipientName: Self.trimmedOrNil(recipientName),
+            sourceName: Self.trimmedOrNil(sourceName),
+            destinationAccount: selectedType == .transfer ? Self.trimmedOrNil(destinationAccount) : nil,
+            isSettled: isSettled
         )
         modelContext.insert(transaction)
         try? modelContext.save()
@@ -218,19 +258,29 @@ struct HomeView: View {
 
         amount = 0
         note = ""
+        recipientName = ""
+        destinationAccount = ""
+        isSettled = true
         selectedCategory = nil
         date = .now
     }
 
-    /// Warns when this newly-saved expense pushes its category over its monthly
-    /// limit. Computed from the pre-save `allTransactions` snapshot plus the
-    /// amount just added, since the @Query hasn't necessarily refreshed yet.
+    private static func trimmedOrNil(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Warns when this newly-saved expense pushes its category over its
+    /// monthly limit *in the current workspace* — the same category can
+    /// carry a different budget (or none) in another workspace. Computed
+    /// from the pre-save `workspaceTransactions` snapshot plus the amount
+    /// just added, since the @Query hasn't necessarily refreshed yet.
     private func checkBudget(for category: Category, addedAmount: Double, addedDate: Date) {
         guard selectedType == .expense,
-              let limit = category.limitAmount,
+              let limit = allBudgets.first(where: { $0.category?.id == category.id && $0.workspace?.id == currentWorkspace?.id })?.limitAmount,
               Calendar.current.isDate(addedDate, equalTo: .now, toGranularity: .month) else { return }
 
-        let priorSpent = BudgetChecker.spentThisMonth(for: category, transactions: allTransactions)
+        let priorSpent = BudgetChecker.spentThisMonth(for: category, transactions: workspaceTransactions)
         let totalSpent = priorSpent + addedAmount
         guard totalSpent > limit else { return }
 

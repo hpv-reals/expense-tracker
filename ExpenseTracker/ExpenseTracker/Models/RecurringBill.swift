@@ -31,6 +31,9 @@ final class RecurringBill {
     var isActive: Bool = true
     var note: String?
     var category: Category?
+    /// Which ledger (e.g. "Cá nhân" vs "Doanh nghiệp") this bill — and every
+    /// transaction it generates — belongs to. See `Workspace`.
+    var workspace: Workspace?
 
     init(
         id: UUID = UUID(),
@@ -42,7 +45,8 @@ final class RecurringBill {
         nextDueDate: Date,
         isActive: Bool = true,
         note: String? = nil,
-        category: Category? = nil
+        category: Category? = nil,
+        workspace: Workspace? = nil
     ) {
         self.id = id
         self.name = name
@@ -54,5 +58,6 @@ final class RecurringBill {
         self.isActive = isActive
         self.note = note
         self.category = category
+        self.workspace = workspace
     }
 }

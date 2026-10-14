@@ -8,6 +8,8 @@ struct ReportsView: View {
 
     @Query(sort: \Transaction.date, order: .reverse) private var allTransactions: [Transaction]
     @Query(sort: \Category.name) private var categories: [Category]
+    @Query(sort: \Workspace.name) private var workspaces: [Workspace]
+    @AppStorage("selectedWorkspaceIDString") private var selectedWorkspaceIDString: String = ""
 
     @State private var period: ReportPeriod = .thisMonth
     @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
@@ -21,6 +23,8 @@ struct ReportsView: View {
     @State private var editingTransaction: Transaction?
     @State private var isShowingImporter = false
     @State private var importResultMessage: String?
+    @State private var isShowingExporter = false
+    @State private var exportDocument = TransactionCSVDocument()
     @Environment(\.modelContext) private var modelContext
 
     /// The `[start, end)` range currently in effect — either the selected preset
@@ -33,14 +37,44 @@ struct ReportsView: View {
         return (start, end)
     }
 
+    /// The workspace ("Cá nhân" vs "Doanh nghiệp") currently in effect — see
+    /// `WorkspaceSwitcher`. Falls back to the default workspace (and then to
+    /// whatever exists) so a not-yet-persisted selection, or a since-deleted
+    /// one, never leaves the tab showing nothing.
+    private var currentWorkspace: Workspace? {
+        workspaces.first(where: { $0.id.uuidString == selectedWorkspaceIDString })
+            ?? workspaces.first(where: \.isDefault)
+            ?? workspaces.first
+    }
+
     private var periodTransactions: [Transaction] {
         let range = activeRange
         return allTransactions.filter { transaction in
             guard transaction.type == .expense,
+                  transaction.workspace?.id == currentWorkspace?.id,
                   transaction.date >= range.start, transaction.date < range.end,
                   let categoryID = transaction.category?.id else { return false }
             return selectedCategoryIDs.contains(categoryID)
         }
+    }
+
+    /// Every transaction type in the active workspace and period — unlike
+    /// `periodTransactions`, not narrowed to expenses or the category filter,
+    /// since the export template carries Thu/Chi/etc. rows.
+    private var exportableTransactions: [Transaction] {
+        let range = activeRange
+        return allTransactions.filter {
+            $0.workspace?.id == currentWorkspace?.id && $0.date >= range.start && $0.date < range.end
+        }
+    }
+
+    private var exportFileName: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let range = activeRange
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: range.end) ?? range.end
+        return "Nep-giao-dich-\(formatter.string(from: range.start))-\(formatter.string(from: lastDay))"
     }
 
     private var categorySpends: [CategorySpend] {
@@ -111,6 +145,18 @@ struct ReportsView: View {
             }
             .navigationTitle("Reports")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    WorkspaceSwitcher(workspaces: workspaces, selectedWorkspaceIDString: $selectedWorkspaceIDString)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        exportDocument = TransactionCSVDocument(text: TransactionCSVExporter.csv(for: exportableTransactions))
+                        isShowingExporter = true
+                    } label: {
+                        Label("Export CSV", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(exportableTransactions.isEmpty)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         isShowingImporter = true
@@ -127,6 +173,16 @@ struct ReportsView: View {
                 allowedContentTypes: [.commaSeparatedText, .plainText],
                 onCompletion: handleImportResult
             )
+            .fileExporter(
+                isPresented: $isShowingExporter,
+                document: exportDocument,
+                contentType: .commaSeparatedText,
+                defaultFilename: exportFileName
+            ) { result in
+                if case .failure(let error) = result {
+                    importResultMessage = "Export thất bại: \(error.localizedDescription)"
+                }
+            }
             .alert(
                 "Import CSV",
                 isPresented: Binding(
@@ -154,7 +210,7 @@ struct ReportsView: View {
             importResultMessage = "Không thể mở file: \(error.localizedDescription)"
         case .success(let url):
             do {
-                let summary = try TransactionCSVImporter.importCSV(at: url, context: modelContext)
+                let summary = try TransactionCSVImporter.importCSV(at: url, context: modelContext, workspace: currentWorkspace)
                 importResultMessage = importSummaryText(summary)
             } catch {
                 importResultMessage = "Import thất bại: \(error.localizedDescription)"

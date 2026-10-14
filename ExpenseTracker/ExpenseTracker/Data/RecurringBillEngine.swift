@@ -24,7 +24,8 @@ enum RecurringBillEngine {
                     date: bill.nextDueDate,
                     note: bill.note ?? bill.name,
                     type: .expense,
-                    category: bill.category
+                    category: bill.category,
+                    workspace: bill.workspace
                 )
                 context.insert(transaction)
                 createdCount += 1

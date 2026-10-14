@@ -18,6 +18,10 @@ struct RecurringBillEditorCard: View {
     }
 
     let target: Target
+    /// Which ledger a newly-created bill (and every transaction it later
+    /// generates) is attached to — an existing bill being edited already has
+    /// its own workspace and doesn't need this.
+    let workspace: Workspace
     let expenseCategories: [Category]
     let onDismiss: () -> Void
 
@@ -195,7 +199,8 @@ struct RecurringBillEditorCard: View {
                 intervalMonths: frequency.intervalMonths,
                 anchorDate: nextDueDate,
                 nextDueDate: nextDueDate,
-                category: selectedCategory
+                category: selectedCategory,
+                workspace: workspace
             )
             modelContext.insert(bill)
         }
